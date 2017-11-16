@@ -10,8 +10,8 @@ from datetime import datetime
 from socket import gethostname
 
 logging.basicConfig(level=logging.os.environ.get('LOG_LEVEL', 'INFO'))
-AGE_TO_KILL = int(os.environ.get('AGE_TO_KILL', 1))
-SLEEP_TIME = int(os.environ.get('SLEEP_TIME', 1))
+AGE_TO_KILL = int(os.environ.get('AGE_TO_KILL', 12))
+SLEEP_TIME = int(os.environ.get('SLEEP_TIME', 10))
 
 
 def get_nodes():
