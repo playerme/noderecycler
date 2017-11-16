@@ -1,0 +1,20 @@
+---
+apiVersion: apps/v1beta1 # for versions before 1.6.0 use extensions/v1beta1
+kind: Deployment
+metadata:
+  name: noderecycler
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: noderecycler
+    spec:
+      containers:
+      - name: noderecycler
+        image: psychopenguin/noderecycler
+        env:
+        - name: AGE_TO_KILL
+          value: "1"
+        - name: SLEEP_TIME
+          value: "1"
