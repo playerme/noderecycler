@@ -27,8 +27,13 @@ def get_node_info(node):
     creation_time = dateutil.parser.parse(metadata['creationTimestamp'])
     name = metadata['name']
     zone = metadata['labels']['failure-domain.beta.kubernetes.io/zone']
+    if 'cloud.google.com/gke-preemptible' in metadata['labels'].keys():
+        preemptible = True
+    else:
+        preemptible = False
     return {'name': name,
             'zone': zone,
+            'preemptible': preemptible,
             'creation_time': mktime(creation_time.timetuple())}
 
 
@@ -37,8 +42,9 @@ def get_node_ages(node_list):
     nodes = []
     for node in node_list:
         node_info = get_node_info(node)
-        node_info['age'] = now - node_info['creation_time']
-        nodes.append(node_info)
+        if node_info['preemptible']:
+            node_info['age'] = now - node_info['creation_time']
+            nodes.append(node_info)
     return sorted(nodes, key=lambda n: n['age'])
 
 
@@ -73,7 +79,7 @@ def is_my_node(node_name):
 
 
 def drain_node(node_name):
-    cmdline = 'kubectl drain {} --ignore-daemonsets --force'.format(node_name)
+    cmdline = 'kubectl drain {} --ignore-daemonsets --force --delete-local-data'.format(node_name)
     cmd = shlex.split(cmdline)
     logging.info('draining node')
     subprocess.call(cmd)
