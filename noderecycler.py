@@ -79,7 +79,7 @@ def is_my_node(node_name):
 
 
 def drain_node(node_name):
-    cmdline = 'kubectl drain {} --ignore-daemonsets --force --delete-local-data'.format(node_name)
+    cmdline = 'kubectl drain {} --grace-period=180 --ignore-daemonsets --force --delete-local-data'.format(node_name)
     cmd = shlex.split(cmdline)
     logging.info('draining node')
     subprocess.call(cmd)
