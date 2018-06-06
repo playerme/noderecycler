@@ -1,4 +1,4 @@
-FROM google/cloud-sdk:198.0.0-alpine
+FROM google/cloud-sdk:203.0.0-alpine
 RUN apk add --no-cache py-pip
 RUN pip install --upgrade pip
 RUN gcloud components install kubectl --quiet
