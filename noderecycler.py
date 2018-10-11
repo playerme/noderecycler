@@ -1,81 +1,83 @@
 import os
-import sys
 import shlex
 import subprocess
-import json
-import dateutil.parser
 import logging
 from time import mktime, sleep
 from datetime import datetime
-from socket import gethostname
+from kubernetes import client, config
 
 logging.basicConfig(level=logging.os.environ.get('LOG_LEVEL', 'INFO'))
 AGE_TO_KILL = int(os.environ.get('AGE_TO_KILL', 12))
 SLEEP_TIME = int(os.environ.get('SLEEP_TIME', 10))
 
 
-def get_nodes():
-    logging.info('using kubectl to get node list')
-    cmd = shlex.split("kubectl get node -o json")
-    output = subprocess.check_output(cmd)
-    nodes = json.loads(output)
-    return nodes['items']
+class Kubernetes():
+    def __init__(self):
+        """
+        Load kubernetes configuration based if instance is running
+        in a cluster or not
+        """
+        if 'KUBERNETES_SERVICE_HOST' in os.environ:
+            logging.info('Running inside a kubernetes cluster')
+            config.load_incluster_config()
+        else:
+            logging.info('Running outside a kubernetes cluster')
+            config.load_kube_config()
+        self.v1 = client.CoreV1Api()
 
+    def get_nodes(self):
+        logging.info('listing nodes')
+        nodes = self.v1.list_node()
+        return nodes.items
 
-def get_node_info(node):
-    metadata = node['metadata']
-    creation_time = dateutil.parser.parse(metadata['creationTimestamp'])
-    name = metadata['name']
-    zone = metadata['labels']['failure-domain.beta.kubernetes.io/zone']
-    if 'cloud.google.com/gke-preemptible' in metadata['labels'].keys():
-        preemptible = True
-    else:
-        preemptible = False
-    return {'name': name,
-            'zone': zone,
-            'preemptible': preemptible,
-            'creation_time': mktime(creation_time.timetuple())}
+    def get_node_info(self, node):
+        metadata = node.metadata
+        creation_time = metadata.creation_timestamp
+        name = metadata.name
+        zone = metadata.labels['failure-domain.beta.kubernetes.io/zone']
+        if 'cloud.google.com/gke-preemptible' in metadata.labels.keys():
+            preemptible = True
+        else:
+            preemptible = False
+        return {'name': name,
+                'zone': zone,
+                'preemptible': preemptible,
+                'cordoned': node.spec.unschedulable,
+                'creation_time': mktime(creation_time.timetuple())}
 
+    def get_node_ages(self):
+        now = mktime(datetime.utcnow().timetuple())
+        nodes = []
+        for node in self.get_nodes():
+            node_info = self.get_node_info(node)
+            if node_info['preemptible']:
+                node_info['age'] = now - node_info['creation_time']
+                nodes.append(node_info)
+        return sorted(nodes, key=lambda n: n['age'])
 
-def get_node_ages(node_list):
-    now = mktime(datetime.utcnow().timetuple())
-    nodes = []
-    for node in node_list:
-        node_info = get_node_info(node)
-        if node_info['preemptible']:
-            node_info['age'] = now - node_info['creation_time']
-            nodes.append(node_info)
-    return sorted(nodes, key=lambda n: n['age'])
+    def cordon_node(self, node):
+        if self.get_node_info(node)['cordoned']:
+            logging.info('node already cordoned')
+        else:
+            logging.info('cordoning node')
+            patch = {
+                    'spec': {
+                        'unschedulable': True
+                        }
+                    }
+            self.v1.patch_node(node.metadata.name, patch)
 
-
-def get_node_status(node_name):
-    cmd = shlex.split('kubectl get node {}'.format(node_name))
-    output = subprocess.check_output(cmd)
-    status = output.split('\n')[1].split()[1].split(',')
-    return status
-
-
-def cordon_node(node_name):
-    if 'SchedulingDisabled' in get_node_status(node_name):
-        logging.info('node already cordoned')
-    else:
-        logging.info('cordoning node')
-        cmd = shlex.split('kubectl cordon {}'.format(node_name))
-        subprocess.call(cmd)
-
-
-def is_my_node(node_name):
-    me = gethostname()
-    cmd = shlex.split('kubectl get pod {} -o wide'.format(me))
-    output = subprocess.check_output(cmd)
-    my_node = output.split('\n')[1].split()[-1]
-    if node_name == my_node:
-        logging.info('this is my node - i should die')
-        cmd = shlex.split('kubectl delete pod {}'.format(me))
-        subprocess.call(cmd)
-        sys.exit(1)
-    else:
-        logging.info('not my node - proceed to kill')
+    def is_my_node(self, node):
+        me = {
+                'name': os.environ['POD_NAME'],
+                'namespace': os.environ['NAMESPACE']
+             }
+        pod_info = self.v1.read_namespaced_pod(me['name'], me['namespace'])
+        if node.metadata.name == pod_info.spec.node_name:
+            return True
+        else:
+            logging.info('not my node - proceed to kill')
+            return False
 
 
 def drain_node(node_name):
@@ -113,6 +115,7 @@ def kill_node(node):
 
 
 if __name__ == '__main__':
+    kube = Kubernetes()
     while True:
         elder_node = get_node_ages(get_nodes())[-1]
         if elder_node['age'] > (AGE_TO_KILL * 60 * 60):
