@@ -4,10 +4,11 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-python-dateutil = "*"
+kubernetes = "*"
 
 [dev-packages]
 neovim = "*"
+pycodestyle = "*"
 
 [requires]
 python_version = "3.7"
