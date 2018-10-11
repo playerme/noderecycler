@@ -1,8 +1,13 @@
-FROM google/cloud-sdk:203.0.0-alpine
-RUN apk add --no-cache py-pip
+FROM python:3.7-alpine
+
+# Upgrade pip and install pipenv
 RUN pip install --upgrade pip
-RUN gcloud components install kubectl --quiet
-ADD requirements.txt /requirements.txt
-RUN pip install -r requirements.txt
+RUN pip install pipenv
+
+# Install dependencies
+ADD Pipfile .
+ADD Pipfile.lock .
+RUN pipenv install --system
+
 ADD noderecycler.py /noderecycler.py
 CMD ["python", "/noderecycler.py"]
