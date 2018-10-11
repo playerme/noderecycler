@@ -79,7 +79,10 @@ def is_my_node(node_name):
 
 
 def drain_node(node_name):
-    cmdline = 'kubectl drain {} --grace-period=180 --ignore-daemonsets --force --delete-local-data'.format(node_name)
+    cmdline = 'kubectl drain {} '\
+            '--grace-period=180 '\
+            '--ignore-daemonsets '\
+            '--force --delete-local-data'.format(node_name)
     cmd = shlex.split(cmdline)
     logging.info('draining node')
     subprocess.call(cmd)
@@ -93,7 +96,8 @@ def remove_node_from_cluster(node_name):
 
 
 def delete_vm(node):
-    cmdline = 'gcloud compute instances delete {} --zone {} --quiet'.format(node['name'], node['zone'])
+    cmdline = 'gcloud compute instances delete '\
+            '{} --zone {} --quiet'.format(node['name'], node['zone'])
     cmd = shlex.split(cmdline)
     logging.info('deleting vm')
     subprocess.call(cmd)
@@ -112,7 +116,8 @@ if __name__ == '__main__':
     while True:
         elder_node = get_node_ages(get_nodes())[-1]
         if elder_node['age'] > (AGE_TO_KILL * 60 * 60):
-            logging.info('node {} is too old and will be killed'.format(elder_node['name']))
+            logging.info('node {} is too old and '
+                         'will be killed'.format(elder_node['name']))
             kill_node(elder_node)
         else:
             logging.info('all nodes are too young to die, will sleep now')
