@@ -1,14 +1,42 @@
 import os
-import shlex
-import subprocess
+import sys
 import logging
+import json
+import requests
+import kubernetes.client
+import kubernetes.config
 from time import mktime, sleep
 from datetime import datetime
-from kubernetes import client, config
+from libcloud.compute.types import Provider
+from libcloud.compute.providers import get_driver
 
 logging.basicConfig(level=logging.os.environ.get('LOG_LEVEL', 'INFO'))
-AGE_TO_KILL = int(os.environ.get('AGE_TO_KILL', 12))
-SLEEP_TIME = int(os.environ.get('SLEEP_TIME', 10))
+AGE_TO_KILL = float(os.environ.get('AGE_TO_KILL', 12))
+SLEEP_TIME = float(os.environ.get('SLEEP_TIME', 10))
+
+
+class GCE():
+    def __init__(self,
+                 key_file=os.environ.get('GCE_CREDENTIALS'),
+                 project=None):
+        with open(key_file) as kf:
+            svc_account = json.loads(kf.read())['client_email']
+        engine = get_driver(Provider.GCE)
+        if not project:
+            project = self.get_project_from_metadata()
+        self.driver = engine(svc_account, key_file, project=project)
+
+    def get_project_from_metadata(self):
+        headers = {'Metadata-Flavor': 'Google'}
+        metadatabaseurl = 'http://metadata.google.internal/computeMetadata/v1'
+        project_path = 'project/project-id'
+        url = '{}/{}'.format(metadatabaseurl, project_path)
+        req = requests.get(url, headers=headers)
+        return req.text
+
+    def get_vm(self, name, zone):
+        node = self.driver.ex_get_node(name, zone=zone)
+        return node
 
 
 class Kubernetes():
@@ -19,44 +47,42 @@ class Kubernetes():
         """
         if 'KUBERNETES_SERVICE_HOST' in os.environ:
             logging.info('Running inside a kubernetes cluster')
-            config.load_incluster_config()
+            kubernetes.config.load_incluster_config()
         else:
             logging.info('Running outside a kubernetes cluster')
-            config.load_kube_config()
-        self.v1 = client.CoreV1Api()
+            kubernetes.config.load_kube_config()
+        self.client = kubernetes.client
+        self.v1 = self.client.CoreV1Api()
+        self.gce = GCE()
+
+    def get_node_age(self, node):
+        now = mktime(datetime.utcnow().timetuple())
+        node_timestamp = mktime(node.metadata.creation_timestamp.timetuple())
+        age = now - node_timestamp
+        return age
 
     def get_nodes(self):
         logging.info('listing nodes')
         nodes = self.v1.list_node()
         return nodes.items
 
-    def get_node_info(self, node):
-        metadata = node.metadata
-        creation_time = metadata.creation_timestamp
-        name = metadata.name
-        zone = metadata.labels['failure-domain.beta.kubernetes.io/zone']
-        if 'cloud.google.com/gke-preemptible' in metadata.labels.keys():
-            preemptible = True
-        else:
-            preemptible = False
-        return {'name': name,
-                'zone': zone,
-                'preemptible': preemptible,
-                'cordoned': node.spec.unschedulable,
-                'creation_time': mktime(creation_time.timetuple())}
+    def get_killable_nodes(self):
+        """
+        This method return a list of nodes to be killed (preemptible ones)
+        """
+        killable_nodes = [
+                n for n in self.get_nodes()
+                if 'cloud.google.com/gke-preemptible' in n.metadata.labels
+                ]
+        return killable_nodes
 
-    def get_node_ages(self):
-        now = mktime(datetime.utcnow().timetuple())
-        nodes = []
-        for node in self.get_nodes():
-            node_info = self.get_node_info(node)
-            if node_info['preemptible']:
-                node_info['age'] = now - node_info['creation_time']
-                nodes.append(node_info)
-        return sorted(nodes, key=lambda n: n['age'])
+    def get_elder_node(self):
+        "This method return the oldest killable node"
+        nodes = sorted(self.get_killable_nodes(), key=self.get_node_age)
+        return nodes[-1]
 
     def cordon_node(self, node):
-        if self.get_node_info(node)['cordoned']:
+        if node.spec.unschedulable:
             logging.info('node already cordoned')
         else:
             logging.info('cordoning node')
@@ -67,6 +93,24 @@ class Kubernetes():
                     }
             self.v1.patch_node(node.metadata.name, patch)
 
+    def get_pods_in_node(self, node):
+        pods = [
+                p for p in self.v1.list_pod_for_all_namespaces().items
+                if p.spec.node_name == node.metadata.name
+                ]
+        return pods
+
+    def evict_pod(self, pod):
+        eviction_body = self.client.V1beta1Eviction(
+                metadata=pod.metadata
+                )
+        logging.info('Evicting {}'.format(pod.metadata.name))
+        eviction = self.v1.create_namespaced_pod_eviction(
+                pod.metadata.name,
+                pod.metadata.namespace,
+                eviction_body)
+        return eviction
+
     def is_my_node(self, node):
         me = {
                 'name': os.environ['POD_NAME'],
@@ -76,52 +120,55 @@ class Kubernetes():
         if node.metadata.name == pod_info.spec.node_name:
             return True
         else:
-            logging.info('not my node - proceed to kill')
             return False
 
+    def drain_node(self, node):
+        logging.info('Draining node')
+        for p in self.get_pods_in_node(node):
+            self.evict_pod(p)
 
-def drain_node(node_name):
-    cmdline = 'kubectl drain {} '\
-            '--grace-period=180 '\
-            '--ignore-daemonsets '\
-            '--force --delete-local-data'.format(node_name)
-    cmd = shlex.split(cmdline)
-    logging.info('draining node')
-    subprocess.call(cmd)
+    def delete_node(self, node):
+        logging.info('removing node from cluster')
+        result = self.v1.delete_node(
+                node.metadata.name,
+                self.client.V1DeleteOptions()
+                )
+        return result
 
+    def delete_vm(self, node):
+        zone = node.metadata.labels['failure-domain.beta.kubernetes.io/zone']
+        vm = self.gce.driver.ex_get_node(
+                node.metadata.name,
+                zone=zone
+                )
+        logging.info('Deleting VM')
+        if vm.destroy():
+            logging.info('VM deleteted successfully')
+        else:
+            logging.error('VM deletion failure')
 
-def remove_node_from_cluster(node_name):
-    cmdline = 'kubectl delete node {}'.format(node_name)
-    cmd = shlex.split(cmdline)
-    logging.info('removing node from cluster')
-    subprocess.call(cmd)
-
-
-def delete_vm(node):
-    cmdline = 'gcloud compute instances delete '\
-            '{} --zone {} --quiet'.format(node['name'], node['zone'])
-    cmd = shlex.split(cmdline)
-    logging.info('deleting vm')
-    subprocess.call(cmd)
-
-
-def kill_node(node):
-    cordon_node(node['name'])
-    is_my_node(node['name'])
-    drain_node(node['name'])
-    remove_node_from_cluster(node['name'])
-    delete_vm(node)
-    logging.info('node killed. time to sleep')
+    def kill_node(self, node):
+        self.cordon_node(node)
+        if self.is_my_node(node):
+            return False
+        self.drain_node(node)
+        self.delete_node(node)
+        self.delete_vm(node)
+        return True
 
 
 if __name__ == '__main__':
     kube = Kubernetes()
     while True:
-        elder_node = get_node_ages(get_nodes())[-1]
-        if elder_node['age'] > (AGE_TO_KILL * 60 * 60):
+        elder_node = kube.get_elder_node()
+        if kube.get_node_age(elder_node) > (AGE_TO_KILL * 60 * 60):
             logging.info('node {} is too old and '
-                         'will be killed'.format(elder_node['name']))
-            kill_node(elder_node)
+                         'will be killed'.format(elder_node.metadata.name))
+            if kube.kill_node(elder_node):
+                logging.info('node killed successfully, sleeping now')
+            else:
+                logging.info('this is my node, exiting')
+                sys.exit(1)
         else:
             logging.info('all nodes are too young to die, will sleep now')
         sleep(SLEEP_TIME * 60)

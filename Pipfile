@@ -5,6 +5,9 @@ name = "pypi"
 
 [packages]
 kubernetes = "*"
+apache-libcloud = "*"
+pycrypto = "*"
+requests = "*"
 
 [dev-packages]
 neovim = "*"

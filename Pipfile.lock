@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "7555dca48991f5bbdf9ced17add3eb0f6f9580dc51a2bf6bf442a8adda668179"
+            "sha256": "8ac4190eb800aff05906102c9da26d8a5f67ceec917a656c74272b50cf165512"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -22,6 +22,14 @@
                 "sha256:a2a2f7e4a2d2e2014e3d5ff9f6d614af280c879a1dbf96bb64d92d85a814a645"
             ],
             "version": "==1.1.0"
+        },
+        "apache-libcloud": {
+            "hashes": [
+                "sha256:0e2eee3802163bd0605975ed1e284cafc23203919bfa80c0cc5d3cd2543aaf97",
+                "sha256:48d5d64790a5112cace1a8e28d228c3f1c5bd3ddbd986a5453172d2da19f47d5"
+            ],
+            "index": "pypi",
+            "version": "==2.3.0"
         },
         "asn1crypto": {
             "hashes": [
@@ -161,6 +169,13 @@
             ],
             "version": "==2.19"
         },
+        "pycrypto": {
+            "hashes": [
+                "sha256:f2ce1e989b272cfcb677616763e0a2e7ec659effa67a88aa92b3a65528f60a3c"
+            ],
+            "index": "pypi",
+            "version": "==2.6.1"
+        },
         "pyjwt": {
             "hashes": [
                 "sha256:30b1380ff43b55441283cc2b2676b755cca45693ae3097325dea01f3d110628c",
@@ -196,6 +211,7 @@
                 "sha256:63b52e3c866428a224f97cab011de738c36aec0185aa91cfacd418b5d58911d1",
                 "sha256:ec22d826a36ed72a7358ff3fe56cbd4ba69dd7a6718ffd450ff0e9df7a47ce6a"
             ],
+            "index": "pypi",
             "version": "==2.19.1"
         },
         "requests-oauthlib": {
