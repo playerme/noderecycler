@@ -6,3 +6,5 @@ We do this for a few reasons:
 * When starting a new pool of pre-emptible node, there's a higher chance that they get terminated in the same time (after 24h)
 
 Dockerhub: https://hub.docker.com/r/splitmedialabs/noderecycler/tags/
+
+Check source code to understand what need to be set-up
