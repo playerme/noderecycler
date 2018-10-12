@@ -1,7 +1,6 @@
 import os
 import logging
 import json
-import requests
 import kubernetes.client
 import kubernetes.config
 from time import mktime, sleep
@@ -15,23 +14,11 @@ SLEEP_TIME = float(os.environ.get('SLEEP_TIME', 10))
 
 
 class GCE():
-    def __init__(self,
-                 key_file=os.environ.get('GCE_CREDENTIALS'),
-                 project=None):
+    def __init__(self, project, key_file=os.environ.get('GCE_CREDENTIALS')):
         with open(key_file) as kf:
             svc_account = json.loads(kf.read())['client_email']
         engine = get_driver(Provider.GCE)
-        if not project:
-            project = self.get_project_from_metadata()
         self.driver = engine(svc_account, key_file, project=project)
-
-    def get_project_from_metadata(self):
-        headers = {'Metadata-Flavor': 'Google'}
-        metadatabaseurl = 'http://metadata.google.internal/computeMetadata/v1'
-        project_path = 'project/project-id'
-        url = '{}/{}'.format(metadatabaseurl, project_path)
-        req = requests.get(url, headers=headers)
-        return req.text
 
     def get_vm(self, name, zone):
         node = self.driver.ex_get_node(name, zone=zone)
@@ -52,7 +39,8 @@ class Kubernetes():
             kubernetes.config.load_kube_config()
         self.client = kubernetes.client
         self.v1 = self.client.CoreV1Api()
-        self.gce = GCE()
+        gce_project = self.get_gce_project()
+        self.gce = GCE(gce_project)
 
     def get_node_age(self, node):
         now = mktime(datetime.utcnow().timetuple())
@@ -64,6 +52,12 @@ class Kubernetes():
         logging.info('listing nodes')
         nodes = self.v1.list_node()
         return nodes.items
+
+    def get_gce_project(self):
+        n = self.get_elder_node()
+        provider_id = n.spec.provider_id
+        project = provider_id.split('/')[2]
+        return project
 
     def get_killable_nodes(self):
         """
