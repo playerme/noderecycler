@@ -1,5 +1,4 @@
 import os
-import sys
 import logging
 import json
 import requests
@@ -116,9 +115,9 @@ class Kubernetes():
                 'name': os.environ['POD_NAME'],
                 'namespace': os.environ['NAMESPACE']
              }
-        pod_info = self.v1.read_namespaced_pod(me['name'], me['namespace'])
-        if node.metadata.name == pod_info.spec.node_name:
-            return True
+        pod = self.v1.read_namespaced_pod(me['name'], me['namespace'])
+        if node.metadata.name == pod.spec.node_name:
+            return pod
         else:
             return False
 
@@ -156,6 +155,9 @@ class Kubernetes():
         self.delete_vm(node)
         return True
 
+    def kill_self(self):
+        self.evict_pod(self.is_my_node(self.get_elder_node()))
+
 
 if __name__ == '__main__':
     kube = Kubernetes()
@@ -168,7 +170,7 @@ if __name__ == '__main__':
                 logging.info('node killed successfully, sleeping now')
             else:
                 logging.info('this is my node, exiting')
-                sys.exit(1)
+                kube.kill_self()
         else:
             logging.info('all nodes are too young to die, will sleep now')
         sleep(SLEEP_TIME * 60)
