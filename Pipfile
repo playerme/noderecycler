@@ -12,6 +12,7 @@ requests = "*"
 [dev-packages]
 neovim = "*"
 pycodestyle = "*"
+nose = "*"
 
 [requires]
 python_version = "3.7"
