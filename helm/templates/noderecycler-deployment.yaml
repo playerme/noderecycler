@@ -1,0 +1,40 @@
+---
+apiVersion: apps/v1beta1 # for versions before 1.6.0 use extensions/v1beta1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: noderecycler
+    spec:
+      {{- if .Values.rbac.create }}
+      serviceAccountName: {{ .Release.Name }}
+      {{- end }}
+      volumes:
+        - name: gce-credentials
+          secret:
+            secretName: gce-credentials
+      containers:
+      - name: noderecycler
+        image: splitmedialabs/noderecycler:{{ .Values.version }}
+        volumeMounts:
+          - name: gce-credentials
+            mountPath: /gce
+        env:
+        - name: AGE_TO_KILL
+          value: "{{ .Values.age_to_kill }}"
+        - name: SLEEP_TIME
+          value: "{{ .Values.sleep_time }}"
+        - name: GCE_CREDENTIALS
+          value: "/gce/gce-key.json"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
