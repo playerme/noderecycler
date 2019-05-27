@@ -19,7 +19,7 @@ spec:
             secretName: gce-credentials
       containers:
       - name: noderecycler
-        image: splitmedialabs/noderecycler:{{ .Values.version }}
+        image: psychopenguin/noderecycler:{{ .Values.version }}
         volumeMounts:
           - name: gce-credentials
             mountPath: /gce
