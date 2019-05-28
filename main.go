@@ -272,7 +272,7 @@ func main() {
 			log.Fatalln("Unable to get oldest node. Quitting")
 			log.Fatalln(err)
 		}
-		a := time.Now().Sub(n.CreationTimestamp.Time)
+		a := time.Since(n.CreationTimestamp.Time)
 		if a > r.AgeToKill {
 			r.recycleNode(n)
 		} else {
