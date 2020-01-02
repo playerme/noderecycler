@@ -1,0 +1,7 @@
+---
+dedicated: false
+version: 3.0.0
+age_to_kill: 18h
+sleep_time: 15m
+rbac:
+  create: true

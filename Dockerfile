@@ -1,20 +1,14 @@
-FROM python:3.7-alpine
+FROM golang:1.12 AS builder
+LABEL name="psychopenguin/noderecycler" \
+    version=3.0.0
+RUN apt-get update && apt-get install -y upx && apt-get clean
+WORKDIR /noderecycler
+COPY go.mod go.sum .
+RUN go get -u .
+COPY main.go .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -v -o noderecycler main.go
+RUN upx --best noderecycler
 
-# Install packages dependencies to build cryptography module
-ARG BUILD_DEPS="gcc musl-dev python3-dev libffi-dev openssl-dev"
-RUN apk add --no-cache $BUILD_DEPS
-
-# Upgrade pip and install pipenv
-RUN pip install --upgrade pip
-RUN pip install pipenv
-
-# Install dependencies
-ADD Pipfile .
-ADD Pipfile.lock .
-RUN pipenv install --system
-
-# Remove build packages dependencies
-RUN apk del $BUILD_DEPS
-
-ADD noderecycler.py /noderecycler.py
-CMD ["python", "/noderecycler.py"]
+FROM busybox:1
+COPY --from=builder ./noderecycler .
+CMD ["./noderecycler"]
