@@ -1,5 +1,5 @@
 ---
-apiVersion: apps/v1beta1 # for versions before 1.6.0 use extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Release.Name }}
@@ -16,10 +16,10 @@ spec:
       volumes:
         - name: gce-credentials
           secret:
-            secretName: gce-credentials
+            secretName: {{ .Values.credentialsSecret }}
       containers:
       - name: noderecycler
-        image: psychopenguin/noderecycler:{{ .Values.version }}
+        image: {{ .Values.image.name }}:{{ .Values.image.version }}
         volumeMounts:
           - name: gce-credentials
             mountPath: /gce

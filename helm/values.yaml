@@ -1,6 +1,9 @@
 ---
 dedicated: false
-version: 3.0.0
+image:
+  version: v3.0.0
+  name: quay.io/travelaudience/noderecycler
+credentialsSecret: gce-credentials
 age_to_kill: 18h
 sleep_time: 15m
 rbac:
