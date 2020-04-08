@@ -3,12 +3,20 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: "noderecycler"
+    app.kubernetes.io/instance: "{{ .Release.name }}"
 spec:
   replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: "noderecycler"
+      app.kubernetes.io/instance: "{{ .Release.name }}"
   template:
     metadata:
       labels:
-        app: noderecycler
+        app.kubernetes.io/name: "noderecycler"
+        app.kubernetes.io/instance: "{{ .Release.name }}"
     spec:
       {{- if .Values.rbac.create }}
       serviceAccountName: {{ .Release.Name }}
